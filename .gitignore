@@ -20,3 +20,6 @@ cdk.context.json
 
 dist/
 build/
+
+# kubectl layer assets
+kubectl-layer/

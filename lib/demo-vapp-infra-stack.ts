@@ -1,6 +1,6 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { aws_ec2 as ec2, aws_eks as eks, aws_lambda as lambda } from 'aws-cdk-lib';
+import { aws_ec2 as ec2, aws_eks as eks, aws_lambda as lambda, aws_iam as iam } from 'aws-cdk-lib';
 
 export class DemoVappInfraStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -12,14 +12,23 @@ export class DemoVappInfraStack extends cdk.Stack {
       natGateways: 1,
     });
 
+    // Create a simple kubectl layer with asset
+    const kubectlLayer = new lambda.LayerVersion(this, 'KubectlLayer', {
+      code: lambda.Code.fromAsset('kubectl-layer'),
+      compatibleRuntimes: [
+        lambda.Runtime.PYTHON_3_9, 
+        lambda.Runtime.PYTHON_3_10, 
+        lambda.Runtime.PYTHON_3_11
+      ],
+      description: 'Simple kubectl layer for EKS',
+    });
+
     // EKS cluster with no default capacity
     const cluster = new eks.Cluster(this, 'PocEks', {
       version: eks.KubernetesVersion.V1_29,
       vpc,
       defaultCapacity: 0,
-      kubectlLayer: lambda.LayerVersion.fromLayerVersionArn(this, 'KubectlLayer', 
-        'arn:aws:lambda:us-east-1:553035198032:layer:kubectl:1'
-      ),
+      kubectlLayer: kubectlLayer,
     });
 
     // Small managed node group
@@ -28,6 +37,13 @@ export class DemoVappInfraStack extends cdk.Stack {
       desiredSize: 2,
       minSize: 1,
       maxSize: 3,
+    });
+
+    // Add IAM user to cluster access (replace with your IAM username)
+    const adminUser = iam.User.fromUserName(this, 'AdminUser', 'matt-admin');
+    cluster.awsAuth.addUserMapping(adminUser, {
+      groups: ['system:masters'],
+      username: 'matt-admin',
     });
 
     // Output cluster name for convenience
